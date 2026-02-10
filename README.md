@@ -1,8 +1,3 @@
-Sehr gerne! Hier ist eine professionell strukturierte README.md, die dein Projekt perfekt als leichtgewichtige Plex/Kodi-Alternative positioniert. Sie erklärt sowohl den Hub (das Web-Frontend) als auch deine mächtigen Python-Tools.
-
-Erstelle einfach eine Datei namens README.md im Hauptordner deines Repositories und kopiere diesen Text hinein:
-
-Markdown
 # 🎥 VideoHub
 
 Eine leichtgewichtige, Python-basierte **Plex/Kodi-Alternative** für Minimalisten. 
