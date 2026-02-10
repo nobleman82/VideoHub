@@ -1,0 +1,41 @@
+# --- Python & Environments ---
+.vs/
+bin/
+obj/
+*.suo
+*.user
+venv/
+.venv/
+env/
+python_env/
+bin/
+include/
+lib/
+share/
+pyvenv.cfg
+
+# --- Python Bytecode ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*- Copy.env
+# --- Konfiguration ---
+.env
+.env_windows
+.env.local
+config.json
+metadaten.json
+
+# --- Tool-Spezifische Temp-Ordner ---
+# Der Ordner aus deinem Movie-Converter
+ConvertetVideos_TEMP/
+wwwroot/thumbs/
+
+# --- Betriebssystem-Dateien ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs ---
+*.log

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎥 Film-Hub (Filme)</title>
+    <!-- Tailwind CSS für die Utility-Klassen (z.B. text-xl, font-semibold) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Verlinkung zur korrigierten zentralen CSS-Datei -->
+    <link rel="stylesheet" href="videohub.css">
+</head>
+<body>
+    <div id="loading"><div class="spinner"></div>Filmdaten werden geladen...</div>
+
+    <div class="header"> 
+        <div class="logo">🎥 Film-Hub</div> 
+        <a class="update-btn" href="update_metadaten_status.html">Datenbank aktualisieren</a>
+    </div>
+
+    <!-- Suchfeld hinzugefügt -->
+    <div id="searchContainer">
+        <input type="text" id="searchInput" placeholder="Filme suchen (Titel, Beschreibung, Genre)...">
+    </div>
+
+    <!-- Navigationsmenü (Jetzt für Genre-Filter) -->
+    <div class="nav-menu" id="navMenu">
+        <a class="nav-link active" data-genre-id="Alle" onclick="filterByGenre('Alle', this)">Alle</a>
+        <!-- Genre-Links werden hier dynamisch eingefügt -->
+        <a class="nav-link" href="videohub_serien.html" style="margin-left: 10px; background-color: #444; border: 1px solid #555;">🎬 Serien</a>
+    </div>
+    
+    <div class="content"> 
+        <!-- Die text-xl, font-semibold, mb-4 und text-center Klassen kommen von Tailwind -->
+        <h3 class="text-xl font-semibold mb-4 text-center">Filme</h3>
+        <div id="movieGrid" class="card-container"> 
+            <!-- Filmkacheln werden hier dynamisch eingefügt -->
+        </div>
+        <p id="noResultsMessage" class="text-center text-gray-400 mt-10 hidden">Keine Filme gefunden, die Ihren Kriterien entsprechen.</p>
+    </div>
+    
+    <!-- Video Modal -->
+    <div id="videoModal" class="modal" onclick="if(event.target.id === 'videoModal') closeModal()">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <div class="modal-content">   
+             <video id="videoPlayer" controls autoplay></video>
+             <div class="info-panel"> 
+                 <h2 id="modalTitle"></h2> 
+                 <p id="modalOverview"></p> 
+             </div>
+             <div class="modal-header" id="modalHeader">
+                 <div class="backdrop-overlay"></div>
+             </div>
+        </div>
+    </div>
+    <div class="footer">Dieses Produkt verwendet die TMDB API, wird aber nicht von TMDB unterstützt oder zertifiziert.</div>
+
+    <script>
+        // --- KONSTANTEN UND GLOBALE VARIABLEN ---
+        const videoModal = document.getElementById('videoModal');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalOverview = document.getElementById('modalOverview');
+        const modalHeader = document.getElementById('modalHeader');
+        const movieGrid = document.getElementById('movieGrid');
+        const navMenu = document.getElementById('navMenu');
+        const loadingScreen = document.getElementById('loading');
+        const searchInput = document.getElementById('searchInput');
+        const noResultsMessage = document.getElementById('noResultsMessage');
+        
+        let allMovies = []; // Alle geladenen Filme
+        let currentGenre = 'Alle'; // Aktuell ausgewählter Genre-Filter
+        const MOVIE_PREFIX = 'Filme_';
+        
+        // **WICHTIG:** Dieser Pfad MUSS mit dem 'web_alias' in Ihrer main.py übereinstimmen!
+        const WEB_ALIAS_PATH = 'Videos/Filme/'; 
+
+        // --- HILFSFUNKTIONEN ---
+
+        /**
+         * KORRIGIERTE UND VEREINFACHTE FUNKTION: Extrahiert den reinen Dateinamen aus dem metadata.json-Schlüssel.
+         * @param {string} key - Der Datenbank-Schlüssel.
+         * @returns {string} Der bereinigte Dateiname (z.B. '28 Years Later (2025).mp4').
+         */
+        function extractFilename(key) {
+            // 1. Entferne das Präfix 'Filme_'.
+            let filename = key.replace(MOVIE_PREFIX, '');
+
+            // 2. Suche nach der letzten Instanz von '_mp4', '_mkv', etc. und ersetze den Unterstrich durch einen Punkt.
+            const extensionRegex = /_([a-z0-9]{2,4})$/i; 
+            
+            if (extensionRegex.test(filename)) {
+                // Ersetze den gefundenen Teil (z.B. "_mp4") durch ".mp4"
+                filename = filename.replace(extensionRegex, (match, ext) => `.${ext}`);
+            }
+            
+            return filename;
+        }
+
+
+        /**
+         * Erstellt die korrekte Web-URL zum Video.
+         * @param {string} key - Der Datenbank-Schlüssel.
+         * @returns {string} Die vollständige URL zur Videodatei.
+         */
+        function getMovieUrl(key) {
+            // 1. Extrahieren des reinen Dateinamens (z.B. '28 Years Later (2025).mp4')
+            const filename = extractFilename(key);
+            
+            // 2. URL-Kodierung: WICHTIG, da Dateinamen Leerzeichen und Sonderzeichen enthalten können.
+            const urlEncodedFilename = encodeURIComponent(filename);
+            
+            // 3. Erstellen der vollständigen URL: WEB_ALIAS_PATH + URL-kodierter Dateiname
+            return `${WEB_ALIAS_PATH}${urlEncodedFilename}`;
+        }
+
+
+        /**
+         * Hilfsfunktion, die den am besten geeigneten Anzeigetitel zurückgibt.
+         */
+        function getDisplayTitle(video, key) {
+            // Fallback: Entfernt Prefix und Endung vom Schlüssel für den Titel.
+            let fallbackTitle = key.replace(MOVIE_PREFIX, '').replace(/_mp4|_mkv|_webm/i, '');
+            
+            // Annahme: Wenn der Dateiname Unterstriche enthält (wegen der TMDB-Logik), sollen diese Leerzeichen sein.
+            fallbackTitle = fallbackTitle.replace(/_/g, ' ');
+            
+            return video.title_display || video.title || fallbackTitle;
+        }
+
+        /**
+         * Lädt ein Video in den Modal.
+         * @param {string} videoUrl - URL der Videodatei.
+         * @param {string} videoName - Anzeigetitel.
+         * @param {string} backdrop - URL des Hintergrundbilds.
+         * @param {string} overview - Beschreibungstext.
+         */
+        function loadVideo(videoUrl, videoName, backdrop, overview) {
+            console.log("Starte Video:", videoName);
+            
+            // Video-Player zurücksetzen
+            videoPlayer.pause();
+            videoPlayer.currentTime = 0;
+            videoPlayer.src = videoUrl;
+
+            // Header-Infos
+            modalTitle.textContent = videoName;
+            modalOverview.innerHTML = overview || 'Keine Beschreibung verfügbar.'; 
+            
+            const safeBackdrop = backdrop || 'none'; 
+            if (safeBackdrop !== 'none' && safeBackdrop.trim() !== '') { 
+                modalHeader.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('${safeBackdrop}')`; 
+                modalHeader.style.height = '350px'; 
+                modalHeader.classList.remove('backdrop-overlay'); 
+            } else { 
+                modalHeader.style.backgroundImage = 'none'; 
+                modalHeader.style.height = '50px'; 
+            }
+
+            // Modal anzeigen und Video starten
+            videoModal.style.display = 'flex';
+            videoPlayer.load();
+            videoPlayer.play().catch(error => {
+                console.warn("Autoplay blockiert oder Fehler beim Starten:", error);
+            });
+        }
+        
+        function closeModal() {
+            videoPlayer.pause();
+            videoPlayer.src = "";
+            videoModal.style.display = 'none';
+        }
+
+        // --- FILTER- & SUCHLOGIK ---
+
+        /**
+         * Setzt den Genre-Filter und rendert neu.
+         */
+        function filterByGenre(genre, clickedElement) {
+            currentGenre = genre;
+            // setze aktiven Link
+            document.querySelectorAll('.nav-link[data-genre-id]').forEach(link => link.classList.remove('active'));
+            clickedElement.classList.add('active');
+
+            // Trigger die Filterung (Suchfeld-Input)
+            renderMovieCards(searchInput.value);
+        }
+
+        /**
+         * Filtert und rendert die Filmkacheln basierend auf Suche und Genre.
+         */
+        function renderMovieCards(searchTerm = '') {
+            const normalizedSearch = searchTerm.toLowerCase().trim();
+            movieGrid.innerHTML = '';
+            let resultsFound = 0;
+
+            const filteredMovies = allMovies.filter(movie => {
+                // 1. Genre-Filter
+                const passesGenre = currentGenre === 'Alle' || (movie.genres && movie.genres.includes(currentGenre));
+
+                // 2. Such-Filter
+                const passesSearch = normalizedSearch === '' || 
+                    getDisplayTitle(movie, movie.key).toLowerCase().includes(normalizedSearch) ||
+                    (movie.overview && movie.overview.toLowerCase().includes(normalizedSearch)) ||
+                    (movie.genres && movie.genres.join(', ').toLowerCase().includes(normalizedSearch));
+                
+                return passesGenre && passesSearch;
+            });
+
+            // Sortierung (z.B. nach Titel)
+            filteredMovies.sort((a, b) => getDisplayTitle(a, a.key).localeCompare(getDisplayTitle(b, b.key)));
+
+
+            filteredMovies.forEach(video => {
+                // HOLEN DES TITELS UND DER URL
+                const key = video.key; 
+                const displayTitle = getDisplayTitle(video, key);
+                const videoUrl = getMovieUrl(key); // NEU KORRIGIERTE FUNKTION
+
+                // Erstellen des sicheren JS-Aufrufs
+                const overviewText = video.overview || 'Keine Beschreibung verfügbar.';
+                const safeOverview = overviewText.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '');
+                
+                const loadCall = `loadVideo('${videoUrl}', '${displayTitle.replace(/'/g, "\\'")}', '${video.backdrop_local_url || video.backdrop || ''}', '${safeOverview}');`;
+
+                const poster = video.poster_local_url || 'https://placehold.co/300x450/1a1a1a/ffffff?text=KEIN+POSTER'; 
+
+                const cardHtml = `
+                    <div class="video-card" onclick="${loadCall}">
+                        <div class="video-thumbnail" style="background-image: url('${poster}');">
+                            ${video.poster_local_url ? "<span class='play-icon'>▶</span>" : "<span class='no-poster'>Kein Poster</span>"}
+                        </div>
+                        <p class="video-title" title="${displayTitle}">${displayTitle}</p>
+                    </div>`;
+                
+                movieGrid.insertAdjacentHTML('beforeend', cardHtml);
+                resultsFound++;
+            });
+
+            // Keine Ergebnisse melden
+            if (resultsFound === 0) {
+                noResultsMessage.classList.remove('hidden');
+            } else {
+                noResultsMessage.classList.add('hidden');
+            }
+        }
+
+
+        // --- HAUPTINITIALISIERUNG ---
+
+        /**
+         * Hauptfunktion zum Parsen der Metadaten und Initialisieren der UI.
+         */
+        function renderMovieHub(data) {
+            allMovies = [];
+            const genres = new Set();
+            
+            // 1. Filmdaten extrahieren und Genres sammeln
+            Object.keys(data).forEach(key => {
+                if (key.startsWith(MOVIE_PREFIX)) {
+                    const movie = data[key];
+                    movie.key = key; // Schlüssel für URL-Generierung speichern
+                    allMovies.push(movie);
+
+                    if (Array.isArray(movie.genres)) {
+                        movie.genres.forEach(genre => genres.add(genre));
+                    }
+                }
+            });
+
+            // 2. Genre-Menü generieren
+            const sortedGenres = Array.from(genres).sort((a, b) => a.localeCompare(b));
+            
+            // Füge Genres nach dem 'Alle' und vor dem 'Serien'-Link ein
+            const seriesLink = navMenu.querySelector('a[href="videohub_serien.html"]');
+            
+            sortedGenres.forEach(genre => {
+                const genreId = genre.replace(/[^a-zA-Z0-9]/g, '_');
+                const link = document.createElement('a');
+                link.className = 'nav-link';
+                link.textContent = genre;
+                link.dataset.genreId = genreId; 
+                link.onclick = function() { filterByGenre(genre, this); }; 
+                navMenu.insertBefore(link, seriesLink);
+            });
+            
+            // 3. Filter und Suche einrichten
+            searchInput.addEventListener('input', (e) => {
+                // Die Suche sollte den aktuellen Genre-Filter beibehalten
+                renderMovieCards(e.target.value); 
+            });
+
+            // 4. Initiales Rendern (Alle Filme, keine Suche)
+            renderMovieCards('');
+
+            // 5. Ladebildschirm ausblenden
+            loadingScreen.style.display = 'none';
+
+            if (allMovies.length === 0) {
+                 movieGrid.innerHTML = '<p class="text-center text-red-500 mt-10">Keine Filmeinträge mit dem Präfix "Filme_" in der metadata.json gefunden.</p>';
+            }
+        }
+
+        // --- INITIALISIERUNG: DATEN LADEN ---
+        async function init() {
+            try {
+                const response = await fetch('metadata.json');
+                if (!response.ok) {
+                    throw new Error('Netzwerkfehler beim Laden von metadata.json. Ist die Datei vorhanden?');
+                }
+                const data = await response.json();
+                renderMovieHub(data);
+            } catch (error) {
+                console.error("FEHLER beim Laden oder Verarbeiten der Metadaten:", error);
+                loadingScreen.innerHTML = `<div class="p-4 bg-red-800 rounded-lg shadow-xl text-white text-center">
+                    <div class="font-bold mb-2">SCHWERWIEGENDER FEHLER:</div>
+                    <p>Metadaten konnten nicht geladen werden. Bitte prüfen Sie:</p>
+                    <ul class="list-disc list-inside text-left mt-2 mx-auto" style="max-width: 300px;">
+                        <li>Ist die Datei 'metadata.json' im Web-Root vorhanden?</li>
+                        <li>Netzwerk- oder Lesezugriffsfehler: ${error.message}</li>
+                    </ul>
+                </div>`;
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

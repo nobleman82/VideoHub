@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="VideoHub/VideoHub.pyproj" Type="888888a0-9f3d-457c-b088-3a5042f75d52" Id="c481b0de-d6fa-4af9-a482-c39eef60ad45">
+    <Build Project="false" />
+  </Project>
+  <Project Path="VideoTools/VideoTools.pyproj" Type="888888a0-9f3d-457c-b088-3a5042f75d52" Id="c3ef77b8-b13c-488e-9bd4-143996f37d3c">
+    <Build Project="false" />
+  </Project>
+</Solution>

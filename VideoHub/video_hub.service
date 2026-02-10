@@ -1,0 +1,19 @@
+[Unit]
+Description=Dashboard Flask App (Port 5000)
+After=network.target
+
+[Service]
+# Verwenden Sie den Benutzer, der Zugriff auf die Datei hat
+User=mario
+Group=mario
+# Gehen Sie in das Verzeichnis, in dem Ihre App liegt
+WorkingDirectory=/home/mario/video_hub
+# Startet die App mit gunicorn, lauscht auf 0.0.0.0:5000
+# Stellen Sie sicher, dass Sie gunicorn installiert haben: sudo apt install gunicorn
+ExecStart=/usr/bin/gunicorn -w 1 -b 0.0.0.0:5000 video_update:app
+
+Restart=always
+
+
+[Install]
+WantedBy=multi-user.target

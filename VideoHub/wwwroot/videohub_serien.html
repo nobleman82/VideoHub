@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 Serien-Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Verlinkung zur korrigierten zentralen CSS-Datei -->
+    <link rel="stylesheet" href="videohub.css">
+</head>
+<body>
+    <div id="loading"><div class="spinner"></div>Seriendaten werden geladen...</div>
+
+    <div class="header"> 
+        <div class="logo">🎬 Serien-Hub</div> 
+        <a class="update-btn" href="update_metadaten_status.html">Datenbank aktualisieren</a>
+    </div>
+
+    <!-- Suchfeld -->
+    <div id="searchContainer">
+        <input type="text" id="searchInput" placeholder="Serien suchen (Titel, Beschreibung, Genre)...">
+    </div>
+
+    <!-- Navigationsmenü (Genre-Filter) -->
+    <div class="nav-menu" id="navMenu">
+        <a class="nav-link active" data-genre-id="Alle" onclick="filterByGenre('Alle', this)">Alle</a>
+        <!-- Genre-Links werden hier dynamisch eingefügt -->
+        <a class="nav-link" href="videohub_filme.html" style="margin-left: 10px; background-color: #444; border: 1px solid #555;">🎥 Filme</a>
+    </div>
+    
+    <div class="content"> 
+        <h3 class="text-xl font-semibold mb-4 text-center">Serien</h3>
+        <div id="seriesGrid" class="card-container"> 
+            <!-- Serienkacheln werden hier dynamisch eingefügt -->
+        </div>
+        <p id="noResultsMessage" class="text-center text-gray-400 mt-10 hidden">Keine Serien gefunden, die Ihren Kriterien entsprechen.</p>
+    </div>
+    
+    <!-- Modal für Serien (Serien-Details und Episoden-Liste) -->
+    <div id="seriesModal" class="modal" onclick="if(event.target.id === 'seriesModal') closeSeriesModal()">
+        <span class="close-btn" onclick="closeSeriesModal()">&times;</span>
+        <div class="modal-content">    
+             <div class="modal-header" id="modalHeader">
+                 <div class="backdrop-overlay"></div>
+             </div>
+             
+             <div class="info-panel"> 
+                 <h2 id="modalTitle"></h2> 
+                 <p id="modalOverview"></p> 
+                 
+                 <!-- Staffel-Auswahl -->
+                 <div class="mt-4 flex items-center gap-4">
+                     <label for="seasonSelect" class="font-bold">Staffel wählen:</label>
+                     <select id="seasonSelect" onchange="loadSelectedSeason()"></select>
+                 </div>
+                 
+                 <!-- Episoden-Container -->
+                 <div id="episodeContainer" class="episode-grid">
+                     <!-- Episodenkarten werden hier eingefügt -->
+                 </div>
+                 
+                 <div id="videoPlayerContainer" class="mt-8 hidden">
+                     <h3 id="episodeTitleDisplay" class="text-lg font-semibold mb-2 text-green-400"></h3>
+                     <video id="videoPlayer" controls autoplay></video>
+                 </div>
+             </div>
+        </div>
+    </div>
+    
+    <div class="footer">Dieses Produkt verwendet die TMDB API, wird aber nicht von TMDB unterstützt oder zertifiziert.</div>
+
+    <script>
+        // --- KONSTANTEN UND GLOBALE VARIABLEN ---
+        const seriesModal = document.getElementById('seriesModal');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoPlayerContainer = document.getElementById('videoPlayerContainer');
+        const episodeTitleDisplay = document.getElementById('episodeTitleDisplay');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalOverview = document.getElementById('modalOverview');
+        const modalHeader = document.getElementById('modalHeader');
+        const seriesGrid = document.getElementById('seriesGrid');
+        const navMenu = document.getElementById('navMenu');
+        const loadingScreen = document.getElementById('loading');
+        const searchInput = document.getElementById('searchInput');
+        const noResultsMessage = document.getElementById('noResultsMessage');
+        const seasonSelect = document.getElementById('seasonSelect');
+        const episodeContainer = document.getElementById('episodeContainer');
+        
+        let allSeries = []; // Alle geladenen Serien-Gruppen
+        let currentGenre = 'Alle';
+        const SERIES_PREFIX = 'Serie_';
+        
+        // **WICHTIG:** Dieser Pfad MUSS mit dem 'web_alias' in Ihrer main.py übereinstimmen!
+        const WEB_ALIAS_PATH = 'Videos/Serie/'; 
+        
+        // Temporäre Speicherung der aktuell geöffneten Serie
+        let currentSeriesDetails = null; // Speichert die Seriedetails
+        
+        // NEU: Map zur Speicherung aller relevanten Episoden-Daten für schnellen Zugriff
+        let episodeDataMap = new Map();
+
+
+        // --- HILFSFUNKTIONEN FÜR DATENEXTRAKTION ---
+
+        /**
+         * Extrahiert den reinen Dateinamen und Pfad aus dem metadata.json-Schlüssel.
+         * @param {string} key - Der Datenbank-Schlüssel (z.B. 'Serie_Arrow_Arrow - S02E02 - In der Falle_mp4').
+         * @returns {{baseDir: string, filename: string, fullPath: string}}
+         */
+        function extractPaths(key) {
+            // 1. Entferne das Präfix 'Serie_'.
+            let parts = key.replace(SERIES_PREFIX, '').split('_'); 
+            
+            // 2. Der erste Teil ist der Titel-Ordner im Web-Alias (z.B. 'Arrow')
+            const baseDir = parts[0]; 
+
+            // 3. Der Rest ist der Episode-Dateiname (z.B. 'Arrow - S02E02 - In der Falle_mp4')
+            const filenameWithSuffix = parts.slice(1).join('_');
+
+            // 4. Endung von '_mp4' zu '.mp4' korrigieren
+            let filename = filenameWithSuffix.replace(/_([a-z0-9]{2,4})$/i, (match, ext) => `.${ext}`);
+            
+            // 5. URL-Pfad zusammenbauen: WEB_ALIAS_PATH / baseDir / filename
+            const urlEncodedPath = `${WEB_ALIAS_PATH}${encodeURIComponent(baseDir)}/${encodeURIComponent(filename)}`;
+            
+            return {
+                baseDir: baseDir,
+                filename: filename,
+                fullPath: urlEncodedPath
+            };
+        }
+        
+        /**
+         * FIX für SundefinedEundefined: Extrahiert SxxExx und den Episodentitel aus dem Dateinamen.
+         * Aktualisiert, um Staffel 0 für nicht erkannte Folgen zu unterstützen.
+         * @param {string} filename - Der Episoden-Dateiname (z.B. 'Arrow - S02E02 - In der Falle.mp4').
+         * @returns {{season: number, episode: number, title: string, code: string}}
+         */
+        function parseEpisodeTitle(filename) {
+            const regex = /(S\d+)(E\d+)/i;
+            const match = filename.match(regex);
+            
+            let season = 0;
+            let episode = 0;
+            
+            // Dateiendung entfernen
+            let baseTitle = filename.replace(/\.(mp4|mkv|webm|avi|mov)$/i, '').trim(); 
+            let title = baseTitle;
+
+            if (match) {
+                // Extrahieren der Nummern
+                season = parseInt(match[1].replace('S', ''), 10);
+                episode = parseInt(match[2].replace('E', ''), 10);
+                
+                // Versuch, den Titel nach der SxxExx-Notation zu isolieren
+                let partsAfterMatch = filename.substring(match.index + match[0].length).trim();
+                
+                // Entferne Bindestriche oder Leerzeichen direkt nach der Nummerierung
+                if (partsAfterMatch.startsWith('-')) {
+                    partsAfterMatch = partsAfterMatch.substring(1).trim();
+                }
+
+                // Entferne die Dateiendung
+                title = partsAfterMatch.replace(/\.(mp4|mkv|webm|avi|mov)$/i, '').trim(); 
+            }
+            
+            // Fallback: Wenn Staffel 0 (TMDB-Titel fehlt), verwende den gesamten Dateinamen
+            // oder einen bereinigten Teil davon als Titel.
+            if (season === 0 || title === '') { 
+                 title = baseTitle.split('/').pop().trim(); 
+                 
+                 // Versuch, den Serientitel am Anfang zu entfernen (z.B. 'Arrow - S02E02 - ...' oder 'Sasha_Sixpack Level 4_mp4')
+                 const seriesName = currentSeriesDetails ? currentSeriesDetails.seriesKey : '';
+                 if (seriesName && title.startsWith(seriesName)) {
+                     title = title.substring(seriesName.length).replace(/^[\s-]+/, '').trim();
+                 }
+
+                 // Wenn wir uns im Modus "lokale Videos" (Staffel 0) befinden, 
+                 // verwenden wir eine einfache aufsteigende Nummerierung für die Episode.
+                 // Die tatsächliche Sortierung erfolgt in loadSeasonEpisodes.
+                 episode = 1; 
+            }
+            
+            // Finalen Code festlegen
+            const code = season > 0 
+                ? `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}` // S02E02
+                : `LOKAL`; // Spezieller Code für nicht erkannte Videos in Staffel 0
+
+
+            return {
+                season: season,
+                episode: episode,
+                title: title,
+                code: code
+            };
+        }
+
+
+        /**
+         * Gibt den besten Anzeigetitel für die Serie zurück (nicht Episode).
+         */
+        function getSeriesDisplayTitle(seriesKey) {
+            // Der Schlüssel ist der Serienname, z.B. 'Arrow'
+            return seriesKey; 
+        }
+
+        // --- UI FUNKTIONEN ---
+
+        /**
+         * Öffnet das Modal und zeigt die Details und die erste Staffel an.
+         */
+        function openSeriesModal(seriesKey) {
+            videoPlayer.pause();
+            videoPlayerContainer.classList.add('hidden');
+            episodeTitleDisplay.textContent = '';
+            
+            currentSeriesDetails = allSeries.find(s => s.seriesKey === seriesKey);
+            
+            if (!currentSeriesDetails) return;
+            
+            // Finde die beste Repräsentations-Episode (mit TMDB-Daten oder die erste lokale)
+            const firstEpisode = currentSeriesDetails.episodes.find(e => e.parsedData.season > 0) || currentSeriesDetails.episodes[0];
+            const displayTitle = getSeriesDisplayTitle(seriesKey);
+
+            // 1. Modal Header und Overview (Serien-Overview)
+            modalTitle.textContent = displayTitle;
+            // Beim Start des Modals wird die Serien-Overview angezeigt.
+            modalOverview.innerHTML = firstEpisode.overview || 'Keine Beschreibung verfügbar.'; 
+            
+            const safeBackdrop = firstEpisode.backdrop_local_url || firstEpisode.backdrop_path || 'none'; 
+            if (safeBackdrop !== 'none' && safeBackdrop.trim() !== '') { 
+                modalHeader.style.backgroundImage = `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('${safeBackdrop}')`; 
+                modalHeader.style.height = '350px'; 
+                modalHeader.classList.remove('backdrop-overlay'); 
+            } else { 
+                modalHeader.style.backgroundImage = 'none'; 
+                modalHeader.style.height = '50px'; 
+            }
+
+            // 2. Staffel-Dropdown füllen
+            seasonSelect.innerHTML = '';
+            const seasonNumbers = new Set(currentSeriesDetails.episodes.map(e => e.parsedData.season)); 
+            const sortedSeasons = Array.from(seasonNumbers).sort((a, b) => a - b);
+            
+            let initialSeason = null;
+            
+            sortedSeasons.forEach(sNum => {
+                const option = document.createElement('option');
+                option.value = sNum;
+                
+                if (sNum === 0) {
+                     option.textContent = `Lokale Videos (${currentSeriesDetails.episodes.filter(e => e.parsedData.season === 0).length})`;
+                } else {
+                     option.textContent = `Staffel ${sNum}`;
+                }
+                
+                seasonSelect.appendChild(option);
+                
+                // Setze die erste reguläre Staffel (oder Staffel 0, falls keine regulären Staffeln)
+                if (initialSeason === null || (sNum > 0 && initialSeason === 0)) {
+                    initialSeason = sNum;
+                }
+            });
+            
+            // 3. Erste Staffel/Lokale Videos anzeigen
+            if (initialSeason !== null) {
+                seasonSelect.value = initialSeason;
+                loadSeasonEpisodes(currentSeriesDetails, initialSeason);
+            } else {
+                 episodeContainer.innerHTML = '<p class="text-center text-gray-400 mt-4">Keine Episoden in dieser Serie gefunden.</p>';
+            }
+
+            seriesModal.style.display = 'flex';
+        }
+        
+        /**
+         * Lädt die Episoden für die ausgewählte Staffel.
+         */
+        function loadSelectedSeason() {
+            const selectedSeason = parseInt(seasonSelect.value, 10);
+            if (currentSeriesDetails) {
+                loadSeasonEpisodes(currentSeriesDetails, selectedSeason);
+            }
+        }
+        
+        /**
+         * Zeigt die Episodenkarten für eine bestimmte Staffel an.
+         */
+        function loadSeasonEpisodes(series, seasonNumber) {
+            episodeContainer.innerHTML = '';
+            videoPlayerContainer.classList.add('hidden'); // Versteckt den Videoplayer, wenn eine neue Staffel geladen wird
+            videoPlayer.pause();
+            
+            let episodesInSeason = series.episodes
+                .filter(e => e.parsedData.season === seasonNumber);
+                
+            // Sortierung: Für reguläre Staffeln nach Episode, für lokale (Staffel 0) nach Dateiname/Schlüssel
+            if (seasonNumber > 0) {
+                 episodesInSeason.sort((a, b) => a.parsedData.episode - b.parsedData.episode);
+            } else {
+                 // Sortiere die lokalen Videos nach ihrem vollen Dateinamen
+                 episodesInSeason.sort((a, b) => a.filename.localeCompare(b.filename));
+            }
+
+
+            if (episodesInSeason.length === 0) {
+                episodeContainer.innerHTML = '<p class="text-center text-gray-400 mt-4">Keine Episoden für diese Staffel gefunden.</p>';
+                return;
+            }
+            
+            episodesInSeason.forEach((episode, index) => {
+                // Wir verwenden die tatsächliche Episodennummer, wenn sie existiert, 
+                // ansonsten eine laufende Nummer in Staffel 0.
+                const epNumber = seasonNumber > 0 ? episode.parsedData.episode : (index + 1);
+
+                // Wenn Staffel 0, verwenden wir den Dateinamen als Basis für den Anzeigetitel
+                const displayCode = seasonNumber > 0 
+                    ? episode.parsedData.code 
+                    : `Lokal #${epNumber}`; // Z.B. Lokal #1, Lokal #2
+
+                const displayTitle = episode.parsedData.title || episode.filename;
+
+                // **FIX:** Hier speichern wir alle notwendigen Daten der Episode im Globalen Cache 
+                // Der Schlüssel muss eindeutig sein, also SerieKey + Original-DB-Schlüssel-Suffix
+                const episodeKey = `${series.seriesKey}_${episode.key}`;
+                
+                // Überblick, falls vorhanden, sonst Fallback
+                const overviewText = episode.overview || 'Keine Beschreibung für diese Episode verfügbar.';
+
+                episodeDataMap.set(episodeKey, {
+                    fullPath: episode.fullPath,
+                    displayTitle: `${displayCode}: ${displayTitle}`, // Z.B. S02E02: Titel oder Lokal #1: Dateiname
+                    overview: overviewText 
+                });
+                
+                // NEUER SICHERER AUFRUF
+                const playCall = `playEpisode('${episodeKey}')`;
+                
+                const episodeStill = episode.episode_still_local_url || 'https://placehold.co/100x56/333333/ffffff?text=E%20Still'; 
+                
+                const cardHtml = `
+                    <div class="episode-card" onclick="${playCall}">
+                        <div class="episode-thumbnail-container">
+                             <div class="episode-thumbnail" style="background-image: url('${episodeStill}');"></div>
+                        </div>
+                        <div class="episode-info">
+                            <p class="episode-meta">${displayCode}</p>
+                            <p class="episode-title" title="${displayTitle}">${displayTitle}</p>
+                        </div>
+                    </div>`;
+                
+                episodeContainer.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+        
+        /**
+         * Spielt die ausgewählte Episode ab und aktualisiert den Overview-Text.
+         * @param {string} episodeKey - Der Schlüssel zur Episode in der episodeDataMap.
+         */
+        function playEpisode(episodeKey) {
+            const episodeInfo = episodeDataMap.get(episodeKey);
+
+            if (!episodeInfo) {
+                console.error("Episoden-Daten nicht gefunden für Schlüssel:", episodeKey);
+                return;
+            }
+            
+            // 1. Titel und Overview setzen
+            episodeTitleDisplay.textContent = episodeInfo.displayTitle;
+            // **FIX HIER:** Overview des Modals auf die Beschreibung der Episode setzen
+            modalOverview.innerHTML = episodeInfo.overview; 
+            
+            // 2. Video-Player zurücksetzen und Quelle setzen
+            videoPlayer.pause();
+            videoPlayer.currentTime = 0;
+            videoPlayer.src = episodeInfo.fullPath;
+
+            // 3. Player anzeigen und Video starten
+            videoPlayerContainer.classList.remove('hidden');
+            videoPlayer.load();
+            videoPlayer.play().catch(error => {
+                console.warn("Autoplay blockiert oder Fehler beim Starten:", error);
+            });
+            
+            // Optional: Zum Video scrollen 
+            videoPlayerContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+
+        function closeSeriesModal() {
+            videoPlayer.pause();
+            videoPlayer.src = "";
+            seriesModal.style.display = 'none';
+            currentSeriesDetails = null;
+            episodeDataMap.clear(); // Map leeren, um Speicher freizugeben
+        }
+
+        // --- FILTER- & SUCHLOGIK ---
+
+        /**
+         * Setzt den Genre-Filter und rendert neu.
+         */
+        function filterByGenre(genre, clickedElement) {
+            currentGenre = genre;
+            // setze aktiven Link
+            document.querySelectorAll('.nav-link[data-genre-id]').forEach(link => link.classList.remove('active'));
+            clickedElement.classList.add('active');
+
+            // Trigger die Filterung (Suchfeld-Input)
+            renderSeriesCards(searchInput.value);
+        }
+
+        /**
+         * Filtert und rendert die Serien-Kacheln basierend auf Suche und Genre.
+         */
+        function renderSeriesCards(searchTerm = '') {
+            const normalizedSearch = searchTerm.toLowerCase().trim();
+            seriesGrid.innerHTML = '';
+            let resultsFound = 0;
+
+            const filteredSeries = allSeries.filter(series => {
+                // Finde die beste Repräsentations-Episode (mit Staffel > 0 oder die erste)
+                const representativeEpisode = series.episodes.find(e => e.parsedData.season > 0) || series.episodes[0];
+                const seriesKey = series.seriesKey;
+
+                // 1. Genre-Filter (Genre wird von der Repräsentations-Episode genommen)
+                const passesGenre = currentGenre === 'Alle' || (representativeEpisode.genres && representativeEpisode.genres.includes(currentGenre));
+
+                // 2. Such-Filter
+                const passesSearch = normalizedSearch === '' || 
+                    seriesKey.toLowerCase().includes(normalizedSearch) ||
+                    (representativeEpisode.overview && representativeEpisode.overview.toLowerCase().includes(normalizedSearch)) ||
+                    (representativeEpisode.genres && representativeEpisode.genres.join(', ').toLowerCase().includes(normalizedSearch));
+                
+                return passesGenre && passesSearch;
+            });
+
+            // Sortierung (nach Serientitel)
+            filteredSeries.sort((a, b) => getSeriesDisplayTitle(a.seriesKey).localeCompare(getSeriesDisplayTitle(b.seriesKey)));
+
+
+            filteredSeries.forEach(series => {
+                const seriesKey = series.seriesKey; 
+                // Finde die beste Repräsentations-Episode (mit Staffel > 0 oder die erste)
+                const representativeEpisode = series.episodes.find(e => e.parsedData.season > 0) || series.episodes[0];
+                
+                // Poster und Titel von der Repräsentations-Episode verwenden
+                const displayTitle = getSeriesDisplayTitle(seriesKey);
+                
+                let posterUrl = 'https://placehold.co/300x450/4B5563/ffffff?text=SERIE+LOKAL'; 
+                let isPlaceholder = true;
+
+                // Priorität 1: Lokales Poster
+                if (representativeEpisode.poster_local_url) {
+                    posterUrl = representativeEpisode.poster_local_url;
+                    isPlaceholder = false;
+                } 
+                // Priorität 2: TMDB-Pfad (wird nur geladen, wenn es nicht "not_found" ist, was main.py filtert)
+                else if (representativeEpisode.poster_path && !representativeEpisode.not_found) {
+                     // Da wir hier nicht tmdb.org aufrufen können, zeigen wir einen Platzhalter, 
+                     // wenn nur der TMDB-Pfad, aber kein lokales Bild existiert.
+                     posterUrl = 'https://placehold.co/300x450/374151/ffffff?text=TMDB+POSTER+FEHLT';
+                }
+                
+                // Falls not_found: true gesetzt ist und kein lokales Poster da ist
+                if (representativeEpisode.not_found && !representativeEpisode.poster_local_url) {
+                    posterUrl = `https://placehold.co/300x450/1F2937/ffffff?text=${encodeURIComponent(seriesKey.toUpperCase())}`;
+                    isPlaceholder = true;
+                }
+                
+                const loadCall = `openSeriesModal('${seriesKey.replace(/'/g, "\\'")}')`;
+
+                const cardHtml = `
+                    <div class="video-card" onclick="${loadCall}">
+                        <div class="video-thumbnail" style="background-image: url('${posterUrl}');">
+                            <!-- Das Playsymbol wurde hier entfernt, da es nur ein Detail-Link ist -->
+                            ${isPlaceholder ? "<span class='no-poster-text'>Lokale Serie</span>" : ""}
+                        </div>
+                        <p class="video-title" title="${displayTitle}">${displayTitle}</p>
+                    </div>`;
+                
+                seriesGrid.insertAdjacentHTML('beforeend', cardHtml);
+                resultsFound++;
+            });
+
+            // Keine Ergebnisse melden
+            if (resultsFound === 0) {
+                noResultsMessage.classList.remove('hidden');
+            } else {
+                noResultsMessage.classList.add('hidden');
+            }
+        }
+
+
+        // --- HAUPTINITIALISIERUNG ---
+
+        /**
+         * Gruppiert die Episoden zu Serien und verarbeitet die Metadaten.
+         */
+        function groupAndProcessSeries(data) {
+            const seriesMap = new Map();
+            const genres = new Set();
+            
+            // 1. Episoden nach Serientitel gruppieren
+            Object.keys(data).forEach(key => {
+                if (key.startsWith(SERIES_PREFIX)) {
+                    const episode = data[key];
+                    const paths = extractPaths(key);
+                    const seriesKey = paths.baseDir; // Der Ordnername ist der Serientitel
+                    
+                    if (!seriesMap.has(seriesKey)) {
+                        seriesMap.set(seriesKey, {
+                            seriesKey: seriesKey,
+                            episodes: []
+                        });
+                    }
+
+                    // WICHTIGE DATEN FÜR die Episode anhängen
+                    episode.key = key; 
+                    episode.fullPath = paths.fullPath;
+                    episode.filename = paths.filename;
+                    
+                    // Der FIX für SxxExx und Titel-Extraktion
+                    episode.parsedData = parseEpisodeTitle(paths.filename);
+                    
+                    // NEU: Wenn not_found: true und keine SxxExx Notation, setze Staffel auf 0 (Lokale Videos)
+                    if (episode.not_found === true && episode.parsedData.season === 0) {
+                        episode.parsedData.season = 0;
+                    }
+                    
+                    seriesMap.get(seriesKey).episodes.push(episode);
+
+                    if (Array.isArray(episode.genres)) {
+                        episode.genres.forEach(genre => genres.add(genre));
+                    }
+                }
+            });
+            
+            allSeries = Array.from(seriesMap.values());
+            
+            // 2. Genre-Menü generieren
+            const sortedGenres = Array.from(genres).sort((a, b) => a.localeCompare(b));
+            
+            const filmLink = navMenu.querySelector('a[href="videohub_filme.html"]');
+            
+            sortedGenres.forEach(genre => {
+                const genreId = genre.replace(/[^a-zA-Z0-9]/g, '_');
+                const link = document.createElement('a');
+                link.className = 'nav-link';
+                link.textContent = genre;
+                link.dataset.genreId = genreId; 
+                link.onclick = function() { filterByGenre(genre, this); }; 
+                navMenu.insertBefore(link, filmLink);
+            });
+            
+            // 3. Filter und Suche einrichten
+            searchInput.addEventListener('input', (e) => {
+                renderSeriesCards(e.target.value); 
+            });
+
+            // 4. Initiales Rendern
+            renderSeriesCards('');
+
+            // 5. Ladebildschirm ausblenden
+            loadingScreen.style.display = 'none';
+
+            if (allSeries.length === 0) {
+                 seriesGrid.innerHTML = '<p class="text-center text-red-500 mt-10">Keine Serieneinträge mit dem Präfix "Serie_" in der metadata.json gefunden.</p>';
+            }
+        }
+
+        // --- INITIALISIERUNG: DATEN LADEN ---
+        async function init() {
+            try {
+                const response = await fetch('metadata.json');
+                if (!response.ok) {
+                    throw new Error('Netzwerkfehler beim Laden von metadata.json. Ist die Datei vorhanden?');
+                }
+                const data = await response.json();
+                groupAndProcessSeries(data);
+            } catch (error) {
+                console.error("FEHLER beim Laden oder Verarbeiten der Metadaten:", error);
+                loadingScreen.innerHTML = `<div class="p-4 bg-red-800 rounded-lg shadow-xl text-white text-center">
+                    <div class="font-bold mb-2">SCHWERWIEGENDER FEHLER:</div>
+                    <p>Metadaten konnten nicht geladen werden. Bitte prüfen Sie:</p>
+                    <ul class="list-disc list-inside text-left mt-2 mx-auto" style="max-width: 300px;">
+                        <li>Ist die Datei 'metadata.json' im Web-Root vorhanden?</li>
+                        <li>Netzwerk- oder Lesezugriffsfehler: ${error.message}</li>
+                    </ul>
+                </div>`;
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
