@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+# 🎥 VideoHub
+>>>>>>> 0c327a02880c59b5d6e0cbca65d0b7226996de11
 
 Eine leichtgewichtige, Python-basierte **Plex/Kodi-Alternative** für Minimalisten. 
 
