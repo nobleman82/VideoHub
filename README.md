@@ -1,33 +1,30 @@
-Sehr gerne! Hier ist eine professionell strukturierte README.md, die dein Projekt perfekt als leichtgewichtige Plex/Kodi-Alternative positioniert. Sie erklärt sowohl den Hub (das Web-Frontend) als auch deine mächtigen Python-Tools.
-
-Erstelle einfach eine Datei namens README.md im Hauptordner deines Repositories und kopiere diesen Text hinein:
-
-Markdown
-# 🎥 VideoHub
 
 Eine leichtgewichtige, Python-basierte **Plex/Kodi-Alternative** für Minimalisten. 
 
-VideoHub ist ein schlankes Media-Center zur Verwaltung und Präsentation privater Videoarchive. Im Gegensatz zu überladenen Lösungen setzt VideoHub auf Transparenz, lokale Kontrolle und verzichtet auf komplexe Datenbank-Silos. Alle Metadaten werden in einer einfachen `metadata.json` verwaltet.
+# 🎥 VideoHub ist ein schlankes Media-Center zur Verwaltung und Präsentation privater Videoarchive. Das Projekt bietet volle Flexibilität: Nutze die **VideoTools** lokal unter Windows zur Aufbereitung oder hoste den **VideoServer** via Flask auf einem Ubuntu-System.
 
 ## ✨ Kernfunktionen
 
-### 🌐 Der Hub (Web-Interface)
-- **Responsive Design:** Optimiert für Desktop und mobile Endgeräte.
-- **Dark Mode:** Modernes, augenschonendes Interface für Filme und Serien.
-- **Statische Struktur:** Extrem schnell durch HTML/JSON-Basis – kein schwerfälliger Webserver-Overkill.
+### 🌐 Der Hub & Server (Hosting)
+- **Flask-Integration:** Ein robuster, leichtgewichtiger Webserver zur Auslieferung deines Hubs.
+- **Cross-Platform:** Optimiert für den Betrieb unter **Windows** und **Ubuntu Linux**.
+- **Deployment-Ready:** Enthält eine `setup_ubuntu.sh` und ein Systemd-Service-File (`video_hub.service`) für echtes 24/7-Hosting auf einem Server oder Raspberry Pi.
+- **Modern UI:** Responsive Dark-Mode Interface für Filme und Serien.
 
 ### 🛠 Die VideoTools (Automatisierung)
-Das Herzstück für ein sauberes Archiv. Die Suite umfasst:
+Das Herzstück für ein sauberes Archiv (GUI-basiert für Windows):
 - **Movie Converter:** Automatisiertes Umwandeln von Videodateien mittels FFmpeg.
-- **File & Serien Renamer:** Bringt Ordnung in Dateinamen (unterstützt S01E01-Schema).
+- **File & Serien Renamer:** Bringt Ordnung in Dateinamen (S01E01-Schema).
 - **Metadaten Editor:** Komfortables Bearbeiten von Filminfos und Postern direkt in der JSON-Datenbank.
-- **Video Update:** Automatische Synchronisierung deines Dateisystems mit dem Hub.
-
+- **Video Update:** Synchronisiert dein Dateisystem automatisch mit dem Hub.
 ## 🚀 Installation & Setup
 
-### Voraussetzungen
-- **Python 3.x**
-- **FFmpeg** (muss im System-PATH registriert sein für den Converter)
+## 📋 Voraussetzungen
+
+Bevor du startest, benötigst du:
+1. **Python 3.x** & **FFmpeg** (für den Converter).
+2. **TMDB API Key:** Für die automatische Abfrage von Filminformationen und Postern benötigst du einen kostenlosen API-Key von [TheMovieDB.org](https://www.themoviedb.org/documentation/api).
+   - Der Key muss in der `.env` Datei unter `TMDB_API_KEY=dein_key_hier` eingetragen werden.
 
 ### 1. Repository klonen
 ```bash
@@ -50,6 +47,29 @@ Kopiere die .env_example Dateien in den jeweiligen Ordnern zu .env und passe dei
 VideoHub/.env: Pfade für den Web-Server und Metadaten.
 
 VideoTools/.env: Pfade für die Automatisierungstools.
+
+## 🚀 Installation & Setup
+
+### 🪟 Windows (Lokal)
+1. Umgebung einrichten:
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate
+   pip install -r VideoHub/requirements.txt
+.env_windows.example zu .env kopieren und Pfade anpassen.
+
+Start des Servers via Flask oder Nutzung der Tools im Ordner VideoTools/.
+
+
+🐧 Ubuntu Server (Remote Hosting)
+Das Projekt ist für den Headless-Betrieb vorbereitet:
+
+Skript ausführbar machen: chmod +x VideoHub/setup_ubuntu.sh
+
+Installation starten: ./VideoHub/setup_ubuntu.sh
+
+Die video_hub.service sorgt dafür, dass der Server nach jedem Neustart automatisch startet.
+
 
 📂 Projektstruktur
 VideoHub/: Enthält das Web-Frontend, CSS und die zentrale metadata.json.
