@@ -1,11 +1,7 @@
-<<<<<<< HEAD
-=======
-# 🎥 VideoHub
->>>>>>> 0c327a02880c59b5d6e0cbca65d0b7226996de11
-
 Eine leichtgewichtige, Python-basierte **Plex/Kodi-Alternative** für Minimalisten. 
 
-# 🎥 VideoHub ist ein schlankes Media-Center zur Verwaltung und Präsentation privater Videoarchive. Das Projekt bietet volle Flexibilität: Nutze die **VideoTools** lokal unter Windows zur Aufbereitung oder hoste den **VideoServer** via Flask auf einem Ubuntu-System.
+# 🎥 VideoHub ist ein schlankes Media-Center zur Verwaltung und Präsentation privater Videoarchive. 
+Das Projekt bietet volle Flexibilität: Nutze die **VideoTools** lokal unter Windows zur Aufbereitung oder hoste den **VideoServer** via Flask auf einem Ubuntu-System.
 
 ## ✨ Kernfunktionen
 
