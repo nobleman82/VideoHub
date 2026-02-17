@@ -1,6 +1,9 @@
 Eine leichtgewichtige, Python-basierte **Plex/Kodi-Alternative** für Minimalisten. 
 
-# 🎥 VideoHub ist ein schlankes Media-Center zur Verwaltung und Präsentation privater Videoarchive. 
+![Vorschau](https://raw.githubusercontent.com/nobleman82/VideoHub/main/preview.png)# 
+
+🎥 VideoHub ist ein schlankes Media-Center zur 
+Verwaltung und Präsentation privater Videoarchive. 
 Das Projekt bietet volle Flexibilität: Nutze die **VideoTools** lokal unter Windows zur Aufbereitung oder hoste den **VideoServer** via Flask auf einem Ubuntu-System.
 
 ## ✨ Kernfunktionen
@@ -30,7 +33,8 @@ Bevor du startest, benötigst du:
 ```bash
 git clone [https://github.com/nobleman82/VideoHub.git](https://github.com/nobleman82/VideoHub.git)
 cd VideoHub
-2. Umgebung einrichten
+````
+### 2. Umgebung einrichten
 Wir empfehlen die Nutzung eines Virtual Environments:
 
 Bash
@@ -61,7 +65,7 @@ VideoTools/.env: Pfade für die Automatisierungstools.
 Start des Servers via Flask oder Nutzung der Tools im Ordner VideoTools/.
 
 
-🐧 Ubuntu Server (Remote Hosting)
+### 🐧 Ubuntu Server (Remote Hosting)
 Das Projekt ist für den Headless-Betrieb vorbereitet:
 
 Skript ausführbar machen: chmod +x VideoHub/setup_ubuntu.sh
@@ -71,14 +75,14 @@ Installation starten: ./VideoHub/setup_ubuntu.sh
 Die video_hub.service sorgt dafür, dass der Server nach jedem Neustart automatisch startet.
 
 
-📂 Projektstruktur
+### 📂 Projektstruktur
 VideoHub/: Enthält das Web-Frontend, CSS und die zentrale metadata.json.
 
 VideoTools/: Die Python-Werkzeuge für das Datei-Management.
 
 wwwroot/: Ort für generierte Thumbnails und statische Seiten.
 
-🛠 Technologien
+### 🛠 Technologien
 Backend/Tools: Python 3
 
 Frontend: HTML5, CSS3 (Modern UI)
@@ -88,3 +92,6 @@ Verarbeitung: FFmpeg via Subprocess
 Konfiguration: Dotenv (.env)
 
 Entwickelt als schlanke Lösung für alle, die die volle Kontrolle über ihre Mediendaten behalten wollen.
+
+### ⚖️Lizenz
+Lizenz: Dieses Projekt steht unter der MIT-Lizenz (siehe LICENSE).
